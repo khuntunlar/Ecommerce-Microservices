@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("IdentityService.ApiTests")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+93647ab6557e0ce0fb52e2f8d2e2cdadc84dc707")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6506b1d3588914d7b9e3cb2fa37d87e4d329119e")]
 [assembly: System.Reflection.AssemblyProductAttribute("IdentityService.ApiTests")]
 [assembly: System.Reflection.AssemblyTitleAttribute("IdentityService.ApiTests")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -32,6 +32,7 @@ services:
     volumes:
       - catalog_mysql_data:/var/lib/mysql
       - ./src/CatalogService.Infrastructure/Persistence/Migrations/202607210001_InitialCatalogSchema.mysql.sql:/docker-entrypoint-initdb.d/001-initial-catalog.sql:ro
+      - ./src/CatalogService.Infrastructure/Persistence/Migrations/202608170001_AddProductImagePrimary.mysql.sql:/docker-entrypoint-initdb.d/002-add-product-image-primary.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}"]
       interval: 10s
@@ -66,6 +67,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Container
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Catalog: Server=catalog-mysql;Port=3306;Database=${CATALOG_MYSQL_DATABASE};User=${MYSQL_USER};Password=${CATALOG_DB_PASSWORD};
+      Jwt__Issuer: ${JWT_ISSUER}
+      Jwt__Audience: ${JWT_AUDIENCE}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY}
       Cors__AllowedOrigins__0: ${FRONTEND_ORIGIN}
     ports:
       - "5295:8080"

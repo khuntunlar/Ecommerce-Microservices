@@ -52,9 +52,9 @@ public sealed class Product
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void AddImage(string url, string altText, int sortOrder)
+    public void AddImage(string url, string altText, int sortOrder, bool isPrimary = false)
     {
-        _images.Add(ProductImage.Create(Id, url, altText, sortOrder));
+        _images.Add(ProductImage.Create(Id, url, altText, sortOrder, isPrimary));
         UpdatedAt = DateTime.UtcNow;
     }
 

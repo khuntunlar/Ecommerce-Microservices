@@ -1,8 +1,7 @@
-using CatalogService.Application.Abstractions;
-using CatalogService.Application.Common.Exceptions;
-using CatalogService.Domain.Catalog;
+using CatalogService.Application.Brands;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CatalogService.Api.Controllers;
 
@@ -10,56 +9,38 @@ namespace CatalogService.Api.Controllers;
 [Route("api/v1/brands")]
 public sealed class BrandsController : ControllerBase
 {
-    private readonly ICatalogDbContext _context;
+    private readonly IMediator _mediator;
 
-    public BrandsController(ICatalogDbContext context)
+    public BrandsController(IMediator mediator)
     {
-        _context = context;
+        _mediator = mediator;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<BrandDto>>> Get(CancellationToken cancellationToken)
-    {
-        var brands = await _context.Brands
-            .OrderBy(x => x.Name)
-            .Select(x => new BrandDto(x.Id, x.Name, x.Slug, x.IsActive))
-            .ToArrayAsync(cancellationToken);
-
-        return Ok(brands);
-    }
+        => Ok(await _mediator.Send(new GetBrandsQuery(), cancellationToken));
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<BrandDto>> Create(BrandRequest request, CancellationToken cancellationToken)
     {
-        var brand = Brand.Create(request.Name, request.Slug);
-        _context.Brands.Add(brand);
-        await _context.SaveChangesAsync(cancellationToken);
-        var dto = new BrandDto(brand.Id, brand.Name, brand.Slug, brand.IsActive);
-        return CreatedAtAction(nameof(Get), new { id = brand.Id }, dto);
+        var result = await _mediator.Send(new CreateBrandCommand(request.Name, request.Slug), cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(Guid id, BrandRequest request, CancellationToken cancellationToken)
     {
-        var brand = await _context.Brands.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Brand not found.");
-
-        brand.Update(request.Name, request.Slug, request.IsActive);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _mediator.Send(new UpdateBrandCommand(id, request.Name, request.Slug, request.IsActive), cancellationToken);
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var brand = await _context.Brands.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Brand not found.");
-
-        _context.Brands.Remove(brand);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _mediator.Send(new DeleteBrandCommand(id), cancellationToken);
         return NoContent();
     }
 }
-
-public sealed record BrandRequest(string Name, string Slug, bool IsActive = true);
-public sealed record BrandDto(Guid Id, string Name, string Slug, bool IsActive);

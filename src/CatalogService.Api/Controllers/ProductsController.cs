@@ -1,8 +1,8 @@
-using CatalogService.Application.Abstractions;
-using CatalogService.Application.Common.Exceptions;
-using CatalogService.Domain.Catalog;
+using CatalogService.Application.Products;
+using CatalogService.Application.Common.Models;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CatalogService.Api.Controllers;
 
@@ -10,140 +10,61 @@ namespace CatalogService.Api.Controllers;
 [Route("api/v1/products")]
 public sealed class ProductsController : ControllerBase
 {
-    private readonly ICatalogDbContext _context;
+    private readonly IMediator _mediator;
 
-    public ProductsController(ICatalogDbContext context)
+    public ProductsController(IMediator mediator)
     {
-        _context = context;
+        _mediator = mediator;
     }
 
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyCollection<ProductDto>>> Get(
+    public async Task<ActionResult<PagedResult<ProductDto>>> Get(
         [FromQuery] string? search,
         [FromQuery] Guid? categoryId,
         [FromQuery] Guid? brandId,
-        CancellationToken cancellationToken)
-    {
-        var query = _context.Products.AsNoTracking();
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            query = query.Where(x => x.Name.Contains(search) || x.Sku.Contains(search));
-        }
-
-        if (categoryId.HasValue)
-        {
-            query = query.Where(x => x.CategoryId == categoryId.Value);
-        }
-
-        if (brandId.HasValue)
-        {
-            query = query.Where(x => x.BrandId == brandId.Value);
-        }
-
-        var products = await query
-            .OrderBy(x => x.Name)
-            .Select(x => new ProductDto(x.Id, x.CategoryId, x.BrandId, x.Name, x.Slug, x.Description, x.Price, x.Sku, x.IsActive))
-            .ToArrayAsync(cancellationToken);
-
-        return Ok(products);
-    }
+        [FromQuery] bool? isActive,
+        [FromQuery] decimal? minPrice,
+        [FromQuery] decimal? maxPrice,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortDirection,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+        => Ok(await _mediator.Send(
+            new GetProductsQuery(search, categoryId, brandId, isActive, minPrice, maxPrice, sortBy, sortDirection, page, pageSize),
+            cancellationToken));
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ProductDto>> GetById(Guid id, CancellationToken cancellationToken)
-    {
-        var product = await _context.Products
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Product not found.");
-
-        return Ok(new ProductDto(product.Id, product.CategoryId, product.BrandId, product.Name, product.Slug, product.Description, product.Price, product.Sku, product.IsActive));
-    }
+        => Ok(await _mediator.Send(new GetProductByIdQuery(id), cancellationToken));
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<ProductDto>> Create(ProductRequest request, CancellationToken cancellationToken)
     {
-        await EnsureCategoryAndBrandExistAsync(request.CategoryId, request.BrandId, cancellationToken);
+        var result = await _mediator.Send(
+            new CreateProductCommand(request.CategoryId, request.BrandId, request.Name, request.Slug, request.Description, request.Price, request.Sku),
+            cancellationToken);
 
-        var product = Product.Create(
-            request.CategoryId,
-            request.BrandId,
-            request.Name,
-            request.Slug,
-            request.Description,
-            request.Price,
-            request.Sku);
-
-        _context.Products.Add(product);
-        await _context.SaveChangesAsync(cancellationToken);
-
-        var dto = new ProductDto(product.Id, product.CategoryId, product.BrandId, product.Name, product.Slug, product.Description, product.Price, product.Sku, product.IsActive);
-        return CreatedAtAction(nameof(GetById), new { id = product.Id }, dto);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(Guid id, ProductRequest request, CancellationToken cancellationToken)
     {
-        await EnsureCategoryAndBrandExistAsync(request.CategoryId, request.BrandId, cancellationToken);
-        var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Product not found.");
+        await _mediator.Send(
+            new UpdateProductCommand(id, request.CategoryId, request.BrandId, request.Name, request.Slug, request.Description, request.Price, request.Sku, request.IsActive),
+            cancellationToken);
 
-        product.Update(
-            request.CategoryId,
-            request.BrandId,
-            request.Name,
-            request.Slug,
-            request.Description,
-            request.Price,
-            request.Sku,
-            request.IsActive);
-
-        await _context.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var product = await _context.Products.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Product not found.");
-
-        _context.Products.Remove(product);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _mediator.Send(new DeleteProductCommand(id), cancellationToken);
         return NoContent();
     }
-
-    private async Task EnsureCategoryAndBrandExistAsync(Guid categoryId, Guid brandId, CancellationToken cancellationToken)
-    {
-        if (!await _context.Categories.AnyAsync(x => x.Id == categoryId, cancellationToken))
-        {
-            throw new NotFoundException("Category not found.");
-        }
-
-        if (!await _context.Brands.AnyAsync(x => x.Id == brandId, cancellationToken))
-        {
-            throw new NotFoundException("Brand not found.");
-        }
-    }
 }
-
-public sealed record ProductRequest(
-    Guid CategoryId,
-    Guid BrandId,
-    string Name,
-    string Slug,
-    string Description,
-    decimal Price,
-    string Sku,
-    bool IsActive = true);
-
-public sealed record ProductDto(
-    Guid Id,
-    Guid CategoryId,
-    Guid BrandId,
-    string Name,
-    string Slug,
-    string Description,
-    decimal Price,
-    string Sku,
-    bool IsActive);

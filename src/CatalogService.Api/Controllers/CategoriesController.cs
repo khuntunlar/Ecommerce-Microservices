@@ -1,8 +1,7 @@
-using CatalogService.Application.Abstractions;
-using CatalogService.Application.Common.Exceptions;
-using CatalogService.Domain.Catalog;
+using CatalogService.Application.Categories;
+using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace CatalogService.Api.Controllers;
 
@@ -10,56 +9,38 @@ namespace CatalogService.Api.Controllers;
 [Route("api/v1/categories")]
 public sealed class CategoriesController : ControllerBase
 {
-    private readonly ICatalogDbContext _context;
+    private readonly IMediator _mediator;
 
-    public CategoriesController(ICatalogDbContext context)
+    public CategoriesController(IMediator mediator)
     {
-        _context = context;
+        _mediator = mediator;
     }
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyCollection<CategoryDto>>> Get(CancellationToken cancellationToken)
-    {
-        var categories = await _context.Categories
-            .OrderBy(x => x.Name)
-            .Select(x => new CategoryDto(x.Id, x.Name, x.Slug, x.IsActive))
-            .ToArrayAsync(cancellationToken);
-
-        return Ok(categories);
-    }
+        => Ok(await _mediator.Send(new GetCategoriesQuery(), cancellationToken));
 
     [HttpPost]
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<CategoryDto>> Create(CategoryRequest request, CancellationToken cancellationToken)
     {
-        var category = Category.Create(request.Name, request.Slug);
-        _context.Categories.Add(category);
-        await _context.SaveChangesAsync(cancellationToken);
-        var dto = new CategoryDto(category.Id, category.Name, category.Slug, category.IsActive);
-        return CreatedAtAction(nameof(Get), new { id = category.Id }, dto);
+        var result = await _mediator.Send(new CreateCategoryCommand(request.Name, request.Slug), cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Update(Guid id, CategoryRequest request, CancellationToken cancellationToken)
     {
-        var category = await _context.Categories.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
-
-        category.Update(request.Name, request.Slug, request.IsActive);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _mediator.Send(new UpdateCategoryCommand(id, request.Name, request.Slug, request.IsActive), cancellationToken);
         return NoContent();
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        var category = await _context.Categories.FirstOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new NotFoundException("Category not found.");
-
-        _context.Categories.Remove(category);
-        await _context.SaveChangesAsync(cancellationToken);
+        await _mediator.Send(new DeleteCategoryCommand(id), cancellationToken);
         return NoContent();
     }
 }
-
-public sealed record CategoryRequest(string Name, string Slug, bool IsActive = true);
-public sealed record CategoryDto(Guid Id, string Name, string Slug, bool IsActive);

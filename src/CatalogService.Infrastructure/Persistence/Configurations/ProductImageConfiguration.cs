@@ -13,6 +13,7 @@ public sealed class ProductImageConfiguration : IEntityTypeConfiguration<Product
         builder.Property(x => x.Url).HasMaxLength(500).IsRequired();
         builder.Property(x => x.AltText).HasMaxLength(180).IsRequired();
         builder.Property(x => x.SortOrder).IsRequired();
+        builder.Property(x => x.IsPrimary).IsRequired();
         builder.HasIndex(x => x.ProductId);
     }
 }

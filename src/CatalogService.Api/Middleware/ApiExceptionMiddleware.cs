@@ -1,4 +1,5 @@
 using CatalogService.Application.Common.Exceptions;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,12 @@ public sealed class ApiExceptionMiddleware
     {
         var problem = exception switch
         {
+            ValidationException validationException => new ProblemDetails
+            {
+                Title = "Validation failed",
+                Detail = string.Join("; ", validationException.Errors.Select(error => error.ErrorMessage)),
+                Status = StatusCodes.Status400BadRequest
+            },
             NotFoundException => new ProblemDetails { Title = "Resource not found", Detail = exception.Message, Status = StatusCodes.Status404NotFound },
             ConflictException or DbUpdateException => new ProblemDetails { Title = "Request conflict", Detail = exception.Message, Status = StatusCodes.Status409Conflict },
             ArgumentException => new ProblemDetails { Title = "Validation failed", Detail = exception.Message, Status = StatusCodes.Status400BadRequest },

@@ -20,6 +20,19 @@ export async function readRefreshToken(): Promise<string | undefined> {
   return (await cookies()).get(refreshTokenCookie)?.value;
 }
 
+export async function readSessionUser(): Promise<AuthSession["user"] | undefined> {
+  const value = (await cookies()).get(userCookie)?.value;
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(value) as AuthSession["user"];
+  } catch {
+    return undefined;
+  }
+}
+
 export async function setSessionCookies(response: NextResponse, session: AuthSession): Promise<void> {
   response.cookies.set(accessTokenCookie, session.accessToken, {
     ...cookieOptions,
