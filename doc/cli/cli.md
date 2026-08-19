@@ -129,6 +129,11 @@ Note AboutPort Conflict:
 mysql --protocol=TCP -h 127.0.0.1 -P 3307 -ukhuntunlar -p ecommerce_with_dot_net
 
 
+= To see DB
+docker compose -f docker-compose.yml -f docker-compose.local-mysql.yml run --rm --no-deps \
+  local-mysql-init \
+  mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" "$IDENTITY_MYSQL_DATABASE"
+  
 
 = Show Table
 docker compose exec mysql mysql -ukhuntunlar -pkhuntunlar2024 ecommerce_with_dot_net \
@@ -137,7 +142,13 @@ docker compose exec mysql mysql -ukhuntunlar -pkhuntunlar2024 ecommerce_with_dot
   = To confirm which database the API is using:
   docker compose exec identity-api printenv ConnectionStrings__Identity
   
-  
+  = Note CLI
+  docker compose config
+  docker compose up -d identity-mysql catalog-mysql
+  docker compose ps
+  docker compose exec identity-mysql mysql -u khuntunlar -p identity_service
+  docker compose exec catalog-mysql mysql -u khuntunlar -p catalog_service
+  docker compose -f docker-compose.yml -f docker-compose.local-mysql.yml exec identity-api printenv ConnectionStrings__Identity
   
   = Check Local TCP
   mysql --protocol=TCP -h 127.0.0.1 -P 3306 -ukhuntunlar -p ecommerce_with_dot_net
