@@ -1,69 +1,59 @@
 # This file is for learning only. Do not run it directly.
-# It shows the difference between Local MySQL only and Docker MySQL only.
+# It compares Docker MySQL and local MySQL with database-per-service.
+
+# DATABASE-PER-SERVICE NAMES
+# Identity Service database: identity_service
+# Catalog Service database:  catalog_service
 
 # ------------------------------------------------------------
 # LOCAL MYSQL ONLY EXAMPLE
 # ------------------------------------------------------------
-# Meaning:
-# - No mysql container.
-# - API container connects to MySQL installed on your laptop/host machine.
-# - phpMyAdmin connected to local MySQL can see the same data.
-# - On Linux, host.docker.internal needs host-gateway mapping.
-#
 # services:
 #   identity-api:
 #     extra_hosts:
 #       - "host.docker.internal:host-gateway"
 #     environment:
-#       ConnectionStrings__Identity: Server=host.docker.internal;Port=3306;Database=ecommerce_with_dot_net;User=khuntunlar;Password=khuntunlar2024;
+#       ConnectionStrings__Identity: Server=host.docker.internal;Port=3306;Database=identity_service;User=khuntunlar;Password=<password>;
 #     depends_on: []
 #
-# What changed compared with Docker MySQL:
-# - Server=mysql became Server=host.docker.internal
-# - Docker mysql service is not used
-# - Host port 3306 is local MySQL, not container MySQL
+#   catalog-api:
+#     extra_hosts:
+#       - "host.docker.internal:host-gateway"
+#     environment:
+#       ConnectionStrings__Catalog: Server=host.docker.internal;Port=3306;Database=catalog_service;User=khuntunlar;Password=<password>;
+#     depends_on: []
 
 # ------------------------------------------------------------
 # DOCKER MYSQL ONLY EXAMPLE
 # ------------------------------------------------------------
-# Meaning:
-# - MySQL runs inside Docker.
-# - API container connects to service name mysql.
-# - Data is stored in Docker volume ecommerce_mysql_data.
-# - Local phpMyAdmin will only see this data if it connects to localhost:3307.
-#
 # services:
-#   mysql:
+#   identity-mysql:
 #     image: mysql:8.4
 #     environment:
-#       MYSQL_DATABASE: ecommerce_with_dot_net
-#       MYSQL_USER: khuntunlar
-#       MYSQL_PASSWORD: khuntunlar2024
-#       MYSQL_ROOT_PASSWORD: khuntunlar2024
+#       MYSQL_DATABASE: identity_service
 #     ports:
 #       - "3307:3306"
 #     volumes:
-#       - ecommerce_mysql_data:/var/lib/mysql
-#       - ./src/IdentityService.Infrastructure/Persistence/Migrations/202607030001_InitialIdentitySchema.mysql.sql:/docker-entrypoint-initdb.d/001-initial-identity.sql:ro
+#       - identity_mysql_data:/var/lib/mysql
+#
+#   catalog-mysql:
+#     image: mysql:8.4
+#     environment:
+#       MYSQL_DATABASE: catalog_service
+#     ports:
+#       - "3308:3306"
+#     volumes:
+#       - catalog_mysql_data:/var/lib/mysql
 #
 #   identity-api:
 #     environment:
-#       ConnectionStrings__Identity: Server=mysql;Port=3306;Database=ecommerce_with_dot_net;User=khuntunlar;Password=khuntunlar2024;
-#     depends_on:
-#       mysql:
-#         condition: service_healthy
+#       ConnectionStrings__Identity: Server=identity-mysql;Port=3306;Database=identity_service;User=khuntunlar;Password=<password>;
 #
-# volumes:
-#   ecommerce_mysql_data:
-#
-# What changed compared with Local MySQL:
-# - Server=host.docker.internal became Server=mysql
-# - Docker mysql service is used
-# - Data lives in Docker volume, not local MySQL data directory
+#   catalog-api:
+#     environment:
+#       ConnectionStrings__Catalog: Server=catalog-mysql;Port=3306;Database=catalog_service;User=khuntunlar;Password=<password>;
 
-# ------------------------------------------------------------
-# CURRENT SUPPORTED-BOTH SETUP
-# ------------------------------------------------------------
+# CURRENT COMMANDS
 # Docker MySQL mode:
 #   docker compose up --build
 #

@@ -1,21 +1,67 @@
-# Use this override when you want the API container to store data in your local machine MySQL.
+# Use this override when you want API containers to store data in your local machine MySQL.
 # Command:
 #   docker compose -f docker-compose.yml -f docker-compose.local-mysql.yml up --build
 #
-# Important for Linux:
-# - MySQL on the host must accept TCP connections from Docker.
-# - Your database/user must exist in local MySQL.
-# - phpMyAdmin must point to the same local MySQL server to see the same data.
+# This override prepares local MySQL automatically before the API containers start.
+# It creates both service databases and applies the current migration SQL files.
 
 services:
-  # Put the Docker MySQL service behind a profile so it will not start in local-MySQL mode.
-  mysql:
+  identity-mysql:
     profiles:
       - docker-mysql
+
+  catalog-mysql:
+    profiles:
+      - docker-mysql
+
+  local-mysql-init:
+    image: mysql:8.4
+    container_name: ecommerce-local-mysql-init
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      MYSQL_PWD: ${MYSQL_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      IDENTITY_MYSQL_DATABASE: ${IDENTITY_MYSQL_DATABASE}
+      CATALOG_MYSQL_DATABASE: ${CATALOG_MYSQL_DATABASE}
+    volumes:
+      - ./src/IdentityService.Infrastructure/Persistence/Migrations/202607030001_InitialIdentitySchema.mysql.sql:/migrations/identity/001-initial-identity.sql:ro
+      - ./src/IdentityService.Infrastructure/Persistence/Migrations/202607130001_Phase01Hardening.mysql.sql:/migrations/identity/002-phase-01-hardening.sql:ro
+      - ./src/CatalogService.Infrastructure/Persistence/Migrations/202607210001_InitialCatalogSchema.mysql.sql:/migrations/catalog/001-initial-catalog.sql:ro
+      - ./src/CatalogService.Infrastructure/Persistence/Migrations/202608170001_AddProductImagePrimary.mysql.sql:/migrations/catalog/002-add-product-image-primary.sql:ro
+    command:
+      - sh
+      - -ec
+      - |
+        until mysqladmin ping -h host.docker.internal -P 3306 -u"$MYSQL_USER" --silent; do
+          echo "Waiting for local MySQL on host.docker.internal:3306..."
+          sleep 2
+        done
+
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" -e "CREATE DATABASE IF NOT EXISTS \`$IDENTITY_MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" -e "CREATE DATABASE IF NOT EXISTS \`$CATALOG_MYSQL_DATABASE\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" "$IDENTITY_MYSQL_DATABASE" < /migrations/identity/001-initial-identity.sql
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" "$IDENTITY_MYSQL_DATABASE" < /migrations/identity/002-phase-01-hardening.sql
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" "$CATALOG_MYSQL_DATABASE" < /migrations/catalog/001-initial-catalog.sql
+        mysql -h host.docker.internal -P 3306 -u"$MYSQL_USER" "$CATALOG_MYSQL_DATABASE" < /migrations/catalog/002-add-product-image-primary.sql
+
+        echo "Local MySQL databases are ready: $IDENTITY_MYSQL_DATABASE, $CATALOG_MYSQL_DATABASE"
 
   identity-api:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      ConnectionStrings__Identity: Server=host.docker.internal;Port=3306;Database=${MYSQL_DATABASE};User=${MYSQL_USER};Password=${IDENTITY_DB_PASSWORD};
-    depends_on: !reset []
+      ConnectionStrings__Identity: Server=host.docker.internal;Port=3306;Database=${IDENTITY_MYSQL_DATABASE};User=${MYSQL_USER};Password=${IDENTITY_DB_PASSWORD};
+    depends_on: !override
+      local-mysql-init:
+        condition: service_completed_successfully
+
+  catalog-api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      ConnectionStrings__Catalog: Server=host.docker.internal;Port=3306;Database=${CATALOG_MYSQL_DATABASE};User=${MYSQL_USER};Password=${CATALOG_DB_PASSWORD};
+    depends_on: !override
+      local-mysql-init:
+        condition: service_completed_successfully
